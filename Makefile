@@ -1,0 +1,3 @@
+.PHONY: build
+build:
+	@go build github.com/LilithGames/nevent/...
