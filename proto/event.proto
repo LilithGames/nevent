@@ -1,0 +1,10 @@
+syntax = "proto3";
+package nevent;
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/LilithGames/nevent/proto";
+
+extend google.protobuf.MessageOptions {
+  optional string subject = 50044;
+}
+

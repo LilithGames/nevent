@@ -1,0 +1,41 @@
+syntax = "proto3";
+package proto;
+
+import "google/protobuf/timestamp.proto";
+import "proto/event.proto";
+
+option go_package = "github.com/LilithGames/nevent/testdata/proto";
+
+message Person {
+  string name = 1;
+  int32 id = 2;  // Unique ID number for this person.
+  string email = 3;
+
+  enum PhoneType {
+    MOBILE = 0;
+    HOME = 1;
+    WORK = 2;
+  }
+
+  message PhoneNumber {
+    string number = 1;
+    PhoneType type = 2;
+  }
+
+  repeated PhoneNumber phones = 4;
+
+  google.protobuf.Timestamp last_updated = 5;
+  option (nevent.subject) = "test.persion";
+}
+
+message Company {
+  string name = 1;
+}
+
+// Our address book file is just one of these.
+message AddressBook {
+  oneof data {
+    Person people = 1;
+    Company company = 2;
+  }
+}
