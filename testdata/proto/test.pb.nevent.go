@@ -4,83 +4,44 @@ package proto
 import (
 	"context"
 
-	"github.com/nats-io/nats.go"
 	"github.com/LilithGames/nevent"
-	natspb "github.com/nats-io/nats.go/encoders/protobuf"
+	"google.golang.org/grpc/metadata"
+	"github.com/golang/protobuf/ptypes"
+	pb "github.com/LilithGames/nevent/proto"
 )
-
-type clientOptions struct{}
-
-type ClientOption interface{
-	apply(*clientOptions)
-}
-
-type funcClientOption struct{
-	f func(*clientOptions)
-}
-
-func (it *funcClientOption) apply(o *clientOptions) {
-	it.apply(o)
-}
-
-func newFuncClientOption(f func(*clientOptions)) *funcClientOption {
-	return &funcClientOption{f: f}
-}
-
-type emitOptions struct{}
-
-type EmitOption interface {
-	apply(*emitOptions)
-}
-
-type funcEmitOption struct{
-	f func(*emitOptions)
-}
-
-func (it *funcEmitOption) apply(o *emitOptions) {
-	it.apply(o)
-}
-
-func newFuncEmitOption(f func(*emitOptions)) *funcEmitOption {
-	return &funcEmitOption{f: f}
-}
-
-type Client struct {
-	ec *nats.EncodedConn
-	o *clientOptions
-}
-
-func NewClient(nc *nats.Conn, opts ...ClientOption) (*Client, error) {
-	ec, err := nats.NewEncodedConn(nc, natspb.PROTOBUF_ENCODER)
-	if err != nil {
-		return nil, err
-	}
-	o := &clientOptions{}
-	for _, opt := range opts {
-		opt.apply(o)
-	}
-	return &Client{ec: ec, o: o}, nil
-}
-
 
 type PersonEventListener interface {
 	OnPersonEvent(ctx context.Context, e *Person)
+	OnError(err error)
 }
 
-func ListenPersonEvent(s *nevent.Server, handler PersonEventListener, opts ...nevent.ListenOption) {
-	cb := func(subject string, reply string, o *Person) {
-		handler.OnPersonEvent(context.TODO(), o)
+func RegisterPersonEvent(s *nevent.Server, handler PersonEventListener, opts ...nevent.ListenOption) {
+	cb := func(subject string, reply string, e *pb.Event) {
+		data := new(Person)
+		err := ptypes.UnmarshalAny(e.Data, data)
+		if err != nil {
+			handler.OnError(err)
+			return
+		}
+		ctx := metadata.NewIncomingContext(context.TODO(), nevent.MDFromEvent(e))
+		s.GetInterceptor()(ctx, subject, reply, data)
+		handler.OnPersonEvent(ctx, data)
 	}
 	s.ListenEvent("test.persion", cb, opts...)
 }
 
-type PersonEventEmitter interface {
-	EmitPerson(ctx context.Context, e *Person, opts ...EmitOption)
+func EmitPerson(ctx context.Context, nc *nevent.Client, e *Person, opts ...nevent.EmitOption) error {
+	nc.GetInterceptor()(ctx, "test.persion", "emit", e)
+	data, err := ptypes.MarshalAny(e)
+	if err != nil {
+		return err
+	}
+	md, _ := metadata.FromOutgoingContext(ctx)
+	return nc.Emit("test.persion", nevent.NewEvent(md, data), opts...)
 }
 
-func (it *Client) EmitPerson(e *Person, opts ...EmitOption) {
-	it.ec.Publish("test.persion", e)
+func (it *Person)Emit(ctx context.Context, nc *nevent.Client, opts ...nevent.EmitOption) error {
+	return EmitPerson(ctx, nc, it, opts...)
 }
-
 
 

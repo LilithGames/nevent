@@ -3,10 +3,12 @@ package nevent
 import (
 	"github.com/nats-io/nats.go"
 	natspb "github.com/nats-io/nats.go/encoders/protobuf"
+	pb "github.com/LilithGames/nevent/proto"
 )
 
 type serverOptions struct {
 	group string
+	interceptor ServerEventInterceptor
 }
 
 type ServerOption interface {
@@ -71,7 +73,9 @@ func ListenGroup(group string) ListenOption {
 	})
 }
 
-func (it *Server) ListenEvent(subject string, cb nats.Handler, opts ...ListenOption) (*nats.Subscription, error) {
+type EventHandler func(subject string, reply string, e *pb.Event)
+
+func (it *Server) ListenEvent(subject string, eh EventHandler, opts ...ListenOption) (*nats.Subscription, error) {
 	lo := &listenOptions{}
 	for _, opt := range opts {
 		opt.apply(lo)
@@ -83,8 +87,15 @@ func (it *Server) ListenEvent(subject string, cb nats.Handler, opts ...ListenOpt
 		group = it.o.group
 	}
 	if group != "" {
-		return it.ec.QueueSubscribe(subject, it.o.group, cb)
+		return it.ec.QueueSubscribe(subject, it.o.group, eh)
 	} else {
-		return it.ec.Subscribe(subject, cb)
+		return it.ec.Subscribe(subject, eh)
 	}
+}
+
+func (it *Server) GetInterceptor() ServerEventInterceptor {
+	if it.o.interceptor == nil {
+		return EmptyServerInterceptor
+	}
+	return it.o.interceptor
 }

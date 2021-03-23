@@ -6,82 +6,45 @@ package {{ package . }}
 import (
 	"context"
 
-	"github.com/nats-io/nats.go"
 	"github.com/LilithGames/nevent"
-	natspb "github.com/nats-io/nats.go/encoders/protobuf"
+	"google.golang.org/grpc/metadata"
+	"github.com/golang/protobuf/ptypes"
+	pb "github.com/LilithGames/nevent/proto"
 )
-
-type clientOptions struct{}
-
-type ClientOption interface{
-	apply(*clientOptions)
-}
-
-type funcClientOption struct{
-	f func(*clientOptions)
-}
-
-func (it *funcClientOption) apply(o *clientOptions) {
-	it.apply(o)
-}
-
-func newFuncClientOption(f func(*clientOptions)) *funcClientOption {
-	return &funcClientOption{f: f}
-}
-
-type emitOptions struct{}
-
-type EmitOption interface {
-	apply(*emitOptions)
-}
-
-type funcEmitOption struct{
-	f func(*emitOptions)
-}
-
-func (it *funcEmitOption) apply(o *emitOptions) {
-	it.apply(o)
-}
-
-func newFuncEmitOption(f func(*emitOptions)) *funcEmitOption {
-	return &funcEmitOption{f: f}
-}
-
-type Client struct {
-	ec *nats.EncodedConn
-	o *clientOptions
-}
-
-func NewClient(nc *nats.Conn, opts ...ClientOption) (*Client, error) {
-	ec, err := nats.NewEncodedConn(nc, natspb.PROTOBUF_ENCODER)
-	if err != nil {
-		return nil, err
-	}
-	o := &clientOptions{}
-	for _, opt := range opts {
-		opt.apply(o)
-	}
-	return &Client{ec: ec, o: o}, nil
-}
-{{ range .Messages }}
-{{ if subject . }}
+{{ range .Messages }}{{ if subject . }}
 type {{ name . }}EventListener interface {
 	On{{ name . }}Event(ctx context.Context, e *{{ name . }})
+	OnError(err error)
 }
 
-func Listen{{ name . }}Event(s *nevent.Server, handler {{ name . }}EventListener, opts ...nevent.ListenOption) {
-	cb := func(subject string, reply string, o *{{ name . }}) {
-		handler.On{{ name . }}Event(context.TODO(), o)
+func Register{{ name . }}Event(s *nevent.Server, handler {{ name . }}EventListener, opts ...nevent.ListenOption) {
+	cb := func(subject string, reply string, e *pb.Event) {
+		data := new({{ name . }})
+		err := ptypes.UnmarshalAny(e.Data, data)
+		if err != nil {
+			handler.OnError(err)
+			return
+		}
+		ctx := metadata.NewIncomingContext(context.TODO(), nevent.MDFromEvent(e))
+		s.GetInterceptor()(ctx, subject, reply, data)
+		handler.On{{ name . }}Event(ctx, data)
 	}
 	s.ListenEvent("{{ subject . }}", cb, opts...)
 }
 
-type {{ name . }}EventEmitter interface {
-	Emit{{ name . }}(ctx context.Context, e *{{ name . }}, opts ...EmitOption)
+func Emit{{ name . }}(ctx context.Context, nc *nevent.Client, e *{{ name . }}, opts ...nevent.EmitOption) error {
+	nc.GetInterceptor()(ctx, "{{ subject . }}", "emit", e)
+	data, err := ptypes.MarshalAny(e)
+	if err != nil {
+		return err
+	}
+	md, _ := metadata.FromOutgoingContext(ctx)
+	return nc.Emit("{{ subject . }}", nevent.NewEvent(md, data), opts...)
 }
 
-func (it *Client) Emit{{ name . }}(e *{{ name . }}, opts ...EmitOption) {
-	it.ec.Publish("{{ subject . }}", e)
+func (it *{{ name . }})Emit(ctx context.Context, nc *nevent.Client, opts ...nevent.EmitOption) error {
+	return Emit{{ name . }}(ctx, nc, it, opts...)
 }
+
 {{ end }}{{ end }}
 `
