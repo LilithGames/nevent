@@ -21,6 +21,22 @@ func PatternSubjectTransformer(pattern string) SubjectTransformer {
 	}
 }
 
+func STSubordinate(ns string) SubjectTransformer {
+	return PatternSubjectTransformer("%s."+ns)
+}
+
+func STAny() SubjectTransformer {
+	return STSubordinate("*")
+}
+
+func STGlob() SubjectTransformer {
+	return STSubordinate(">")
+}
+
+func STValue(value string) SubjectTransformer {
+	return STSubordinate(value)
+}
+
 func DefaultSubjectNormalize(subject string) string {
 	s := subject
 	s = strings.Replace(s, ".", "/", -1)

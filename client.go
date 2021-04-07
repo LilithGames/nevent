@@ -38,6 +38,12 @@ func ClientSubjectTransformer(ts SubjectTransformer) ClientOption {
 	})
 }
 
+func ClientSTValue(value string) ClientOption {
+	return newFuncClientOption(func(o *clientOptions) {
+		o.subjectTransformer = STValue(value)
+	})
+}
+
 type emitOptions struct{
 	subjectTransformer SubjectTransformer
 }
@@ -51,7 +57,7 @@ type funcEmitOption struct{
 }
 
 func (it *funcEmitOption) apply(o *emitOptions) {
-	it.apply(o)
+	it.f(o)
 }
 
 func newFuncEmitOption(f func(*emitOptions)) *funcEmitOption {
@@ -61,6 +67,12 @@ func newFuncEmitOption(f func(*emitOptions)) *funcEmitOption {
 func EmitSubjectTransformer(ts SubjectTransformer) EmitOption {
 	return newFuncEmitOption(func(o *emitOptions) {
 		o.subjectTransformer = ts
+	})
+}
+
+func EmitSTValue(value string) EmitOption {
+	return newFuncEmitOption(func(o *emitOptions) {
+		o.subjectTransformer = STValue(value)
 	})
 }
 

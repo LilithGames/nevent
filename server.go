@@ -49,6 +49,13 @@ func ServerSubjectTransformer(ts SubjectTransformer) ServerOption {
 	})
 }
 
+func ServerSTValue(value string) ServerOption {
+	return newFuncServerOption(func(o *serverOptions) {
+		o.subjectTransformer = STValue(value)
+	})
+}
+
+
 type Server struct {
 	nc *nats.Conn
 	o *serverOptions
@@ -105,6 +112,12 @@ func ListenQueue(queue string) ListenOption {
 func ListenSubjectTransformer(ts SubjectTransformer) ListenOption {
 	return newFuncListenOption(func(o *listenOptions) {
 		o.subjectTransformer = ts
+	})
+}
+
+func ListenSTValue(value string) ListenOption {
+	return newFuncListenOption(func(o *listenOptions) {
+		o.subjectTransformer = STValue(value)
 	})
 }
 

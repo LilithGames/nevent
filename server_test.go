@@ -55,7 +55,7 @@ func provideServer(t *testing.T, id string, queue string) *nevent.Server {
 	es, err := nevent.NewServer(s, nevent.Queue(queue), interceptor)
 	assert.Nil(t, err)
 	svc := &service{id: id, queue: queue}
-	pb.RegisterPersonEvent(es, svc)
+	pb.RegisterPersonEvent(es, svc, nevent.ListenSTValue("*"))
 	pb.RegisterPersonAsk(es, svc)
 	pb.RegisterPersonPush(es, svc)
 	return es
@@ -93,7 +93,7 @@ func provideClient(t *testing.T) *pb.TestClient {
 func TestEvent(t *testing.T) {
 	provideServer(t, "id", "queue")
 	pbc := provideClient(t)
-	err := pbc.PersonEvent(context.TODO(), &pb.Person{Name: "hulucc_event"})
+	err := pbc.PersonEvent(context.TODO(), &pb.Person{Name: "hulucc_event"}, nevent.EmitSTValue("1"))
 	assert.Nil(t, err)
 	select{}
 }
