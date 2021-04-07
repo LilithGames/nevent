@@ -15,3 +15,7 @@ proto-event:
 .PHONY: proto
 proto: clean build
 	@protoc -I=. --go_out=paths=source_relative:. --nevent_out=paths=source_relative:. testdata/proto/test.proto
+
+.PHONY: tag
+tag:
+	@git tag $$(svu next)
