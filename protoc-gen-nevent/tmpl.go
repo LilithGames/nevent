@@ -5,46 +5,140 @@ package {{ package . }}
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/nats-io/nats.go"
+	"github.com/golang/protobuf/proto"
 	"github.com/LilithGames/nevent"
-	"google.golang.org/grpc/metadata"
-	"github.com/golang/protobuf/ptypes"
 	pb "github.com/LilithGames/nevent/proto"
 )
-{{ range .Messages }}{{ if subject . }}
-type {{ name . }}EventListener interface {
-	On{{ name . }}Event(ctx context.Context, e *{{ name . }})
-	OnError(err error)
+{{- $foptions := options . }}
+{{- $fsubject := default $foptions.Subject (package .) }}
+{{- range .Services }}
+{{- $svc := .Name }}
+{{- $soptions := options . }}
+{{- $ssubject := default $soptions.Subject $svc }}
+{{- $bsubject := printf "%s.%s" $fsubject $ssubject }}
+
+type {{ $svc }}Client struct{
+	nc *nevent.Client
 }
 
-func Register{{ name . }}Event(s *nevent.Server, handler {{ name . }}EventListener, opts ...nevent.ListenOption) {
-	cb := func(subject string, reply string, e *pb.Event) {
-		data := new({{ name . }})
-		err := ptypes.UnmarshalAny(e.Data, data)
+func New{{ $svc }}Client(nc *nevent.Client) *{{ $svc }}Client{
+	return &{{ $svc }}Client{nc: nc}
+}
+{{- range .Methods }}
+{{- $oname := name .Output }}
+{{- $moptions := options . }}
+{{- $msubject := default $moptions.Subject (name .) }}
+{{- $subject := printf "%s.%s.%s" $fsubject $ssubject $msubject }}
+
+{{- if (eq $oname "Void") }}
+
+type {{ name . }}Listener interface {
+	On{{ name . }}(ctx context.Context, m *{{ name .Input }})
+}
+
+func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
+	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
+		data := new({{ name .Input }})
+		err := proto.Unmarshal(m.Data, data)
 		if err != nil {
-			handler.OnError(err)
-			return
+			return nil, fmt.Errorf("unmarshal event: %w", err)
 		}
-		ctx := metadata.NewIncomingContext(context.TODO(), nevent.MDFromEvent(e))
-		s.GetInterceptor()(ctx, subject, reply, data)
-		handler.On{{ name . }}Event(ctx, data)
+		handler.On{{ name . }}(ctx, data)
+		return nil, nil
 	}
-	s.ListenEvent("{{ subject . }}", cb, opts...)
+	return s.ListenEvent("{{ $subject }}", pb.EventType_Event, eh, opts...)
 }
 
-func Emit{{ name . }}(ctx context.Context, nc *nevent.Client, e *{{ name . }}, opts ...nevent.EmitOption) error {
-	nc.GetInterceptor()(ctx, "{{ subject . }}", "emit", e)
-	data, err := ptypes.MarshalAny(e)
+func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) error {
+	msg := nats.NewMsg("{{ $subject }}")
+	data, err := proto.Marshal(e)
 	if err != nil {
-		return err
+		fmt.Errorf("event marshal error", err)
 	}
-	md, _ := metadata.FromOutgoingContext(ctx)
-	return nc.Emit("{{ subject . }}", nevent.NewEvent(md, data), opts...)
+	msg.Data = data
+	return it.nc.Emit(ctx, msg, opts...)
 }
 
-func (it *{{ name . }})Emit(ctx context.Context, nc *nevent.Client, opts ...nevent.EmitOption) error {
-	return Emit{{ name . }}(ctx, nc, it, opts...)
+{{- else if (eq $oname "PushAck") }}
+type {{ name . }}Listener interface {
+	On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (error)
 }
 
-{{ end }}{{ end }}
+func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
+	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
+		data := new({{ name .Input }})
+		err := proto.Unmarshal(m.Data, data)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal event: %w", err)
+		}
+		err = handler.On{{ name . }}(ctx, data)
+		return nil, err
+	}
+	return s.ListenEvent("{{ $subject }}", pb.EventType_Push, eh, opts...)
+}
+
+func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) (*pb.PushAck, error) {
+	msg := nats.NewMsg("{{ $subject }}")
+	data, err := proto.Marshal(e)
+	if err != nil {
+		return nil, fmt.Errorf("ask marshal error", err)
+	}
+	msg.Data = data
+	return it.nc.Push(ctx, msg, opts...)
+}
+
+func Ensure{{ name . }}Stream(str *nevent.Stream, opts ...nevent.StreamOption) (*nats.StreamInfo, error) {
+	return str.EnsureStream("{{ $subject }}", opts...)
+}
+{{- else }}
+
+type {{ name . }}Listener interface {
+	On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (*{{ name .Output }}, error)
+}
+
+func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
+	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
+		data := new({{ name .Input }})
+		err := proto.Unmarshal(m.Data, data)
+		if err != nil {
+			return nil, fmt.Errorf("server unmarshal ask: %w", err)
+		}
+		resp, err := handler.On{{ name . }}(ctx, data)
+		if err != nil {
+			return nil, err
+		}
+		bs, err := proto.Marshal(resp)
+		if err != nil {
+			return nil, fmt.Errorf("server marshal answer: %w", err)
+		}
+		return bs, nil
+	}
+	return s.ListenEvent("{{ $subject }}", pb.EventType_Ask, eh, opts...)
+}
+
+func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) (*{{ name .Output }}, error) {
+	msg := nats.NewMsg("{{ $subject }}")
+	data, err := proto.Marshal(e)
+	if err != nil {
+		return nil, fmt.Errorf("ask marshal error", err)
+	}
+	msg.Data = data
+	resp, err := it.nc.Ask(ctx, msg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	answer := new({{ name .Output }})
+	err = proto.Unmarshal(resp, answer)
+	if err != nil {
+		return nil, fmt.Errorf("answer unmarshal error", err)
+	}
+	return answer, nil
+}
+{{- end }}
+
+{{- end }}
+{{- end }}
 `

@@ -2,13 +2,13 @@ syntax = "proto3";
 package proto;
 
 import "google/protobuf/timestamp.proto";
-import "proto/event.proto";
+import "proto/nevent.proto";
 
 option go_package = "github.com/LilithGames/nevent/testdata/proto";
 
 message Person {
   string name = 1;
-  int32 id = 2;  // Unique ID number for this person.
+  int32 id = 2;
   string email = 3;
 
   enum PhoneType {
@@ -25,7 +25,6 @@ message Person {
   repeated PhoneNumber phones = 4;
 
   google.protobuf.Timestamp last_updated = 5;
-  option (nevent.subject) = "test.persion";
 }
 
 message Company {
@@ -38,4 +37,14 @@ message AddressBook {
     Person people = 1;
     Company company = 2;
   }
+}
+
+service Test {
+  rpc PersonEvent(Person) returns (nevent.Void);
+  rpc PersonAsk(Person) returns (Company);
+  rpc PersonPush(Person) returns (nevent.PushAck) {
+    option (nevent.moptions) = {
+      subject: "person_push"
+    };
+  };
 }

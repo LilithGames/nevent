@@ -2,15 +2,23 @@ package nevent
 
 import (
 	"context"
-	// pb "github.com/LilithGames/nevent/proto"
-	pbi "google.golang.org/protobuf/runtime/protoiface"
+
+	"github.com/nats-io/nats.go"
+	pb "github.com/LilithGames/nevent/proto"
 )
 
-type ServerEventInterceptor func(ctx context.Context, subject string, reply interface{}, e pbi.MessageV1)
+type ServerEventHandler func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error)
+type ServerInterceptor func(next ServerEventHandler) ServerEventHandler
 
-func EmptyServerInterceptor(ctx context.Context, subject string, reply interface{}, e pbi.MessageV1) {}
+func IdentityServerInterceptor() ServerInterceptor {
+	return func(next ServerEventHandler) ServerEventHandler {
+		return func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error) {
+			return next(ctx, t, m)
+		}
+	}
+}
 
-func ServerInterceptor(i ServerEventInterceptor) ServerOption {
+func FuncServerInterceptor(i ServerInterceptor) ServerOption {
 	return newFuncServerOption(func(o *serverOptions) {
 		if o.interceptor != nil {
 			panic("interceptor already exists")
@@ -19,29 +27,40 @@ func ServerInterceptor(i ServerEventInterceptor) ServerOption {
 	})
 }
 
-func ChainServerInterceptor(items ...ServerEventInterceptor) ServerEventInterceptor {
-	return func(ctx context.Context, subject string, reply interface{}, e pbi.MessageV1) {
-		for _, item := range items {
-			item(ctx, subject, reply, e)
+func ChainServerInterceptor(items ...ServerInterceptor) ServerInterceptor {
+	return func(next ServerEventHandler) ServerEventHandler {
+		current := next
+		for i := len(items)-1; i >= 0; i-- {
+			current = items[i](current)
 		}
+		return current
 	}
 }
 
 
-type ClientEventInterceptor func(ctx context.Context, subject string, method interface{}, e pbi.MessageV1)
+type ClientEventInvoker func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error)
+type ClientInterceptor func(next ClientEventInvoker) ClientEventInvoker
 
-func EmptyClientInterceptor(ctx context.Context, subject string, method interface{}, e pbi.MessageV1) {}
+func IdentityClientInterceptor() ClientInterceptor {
+	return func(next ClientEventInvoker) ClientEventInvoker {
+		return func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error) {
+			return next(ctx, t, m)
+		}
+	}
+}
 
-func ClientInterceptor(i ClientEventInterceptor) ClientOption {
+func FuncClientInterceptor(i ClientInterceptor) ClientOption {
 	return newFuncClientOption(func (o *clientOptions) {
 		o.interceptor = i
 	})
 }
 
-func ChainClientInterceptor(items ...ClientEventInterceptor) ClientEventInterceptor {
-	return func(ctx context.Context, subject string, method interface{}, e pbi.MessageV1) {
-		for _, item := range items {
-			item(ctx, subject, method, e)
+func ChainClientInterceptor(items ...ClientInterceptor) ClientInterceptor {
+	return func(next ClientEventInvoker) ClientEventInvoker {
+		current := next
+		for i := len(items)-1; i >= 0; i-- {
+			current = items[i](current)
 		}
+		return current
 	}
 }

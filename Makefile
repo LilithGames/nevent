@@ -10,7 +10,7 @@ clean:
 
 .PHONY: proto-event
 proto-event:
-	@protoc -I=. --go_out=paths=source_relative:. proto/event.proto
+	@protoc -I=. --go_out=paths=source_relative:. proto/nevent.proto
 
 .PHONY: proto
 proto: clean build

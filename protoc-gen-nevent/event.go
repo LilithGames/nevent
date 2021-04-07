@@ -25,17 +25,34 @@ func (it *event) InitContext(c pgs.BuildContext) {
 	tpl := template.New("event").Funcs(map[string]interface{}{
 		"package": it.ctx.PackageName,
 		"name": it.ctx.Name,
-		"subject": func(m pgs.Message) string {
-			options := m.Descriptor().GetOptions()
-			opt, err := proto.GetExtension(options, pb.E_Subject)
+		"default": func(value interface{}, defaultValue interface{}) interface{} {
+			switch v := value.(type) {
+			case string:
+				if v == "" {
+					return defaultValue
+				}
+			default:
+				panic("default: unknown type")
+			}
+			return value
+		},
+		"options": func(node pgs.Node) *pb.EventOption {
+			var opt interface{}
+			var err error
+			switch n := node.(type) {
+			case pgs.File:
+				opt, err = proto.GetExtension(n.Descriptor().GetOptions(), pb.E_Foptions)
+			case pgs.Service:
+				opt, err = proto.GetExtension(n.Descriptor().GetOptions(), pb.E_Soptions)
+			case pgs.Method:
+				opt, err = proto.GetExtension(n.Descriptor().GetOptions(), pb.E_Moptions)
+			default:
+				panic("node options not supported")
+			}
 			if err != nil {
-				return ""
+				return new(pb.EventOption)
 			}
-			subject := opt.(*string)
-			if subject == nil {
-				return ""
-			}
-			return *subject
+			return opt.(*pb.EventOption)
 		},
 	})
 	it.tpl = template.Must(tpl.Parse(tmpl))
@@ -53,9 +70,7 @@ func (it *event) Execute(targets map[string]pgs.File, pkgs map[string]pgs.Packag
 }
 
 func (it *event) generate(f pgs.File) {
-	if len(f.Services()) != 0 {
-		it.Failf("syntax error: services not supported in event protobuf")
-	}
 	name := it.ctx.OutputPath(f).SetExt(".nevent.go").String()
+	f.Services()
 	it.AddGeneratorTemplateFile(name, it.tpl, f)
 }
