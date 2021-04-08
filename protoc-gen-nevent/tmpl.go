@@ -84,7 +84,7 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 	msg := nats.NewMsg("{{ $subject }}")
 	data, err := proto.Marshal(e)
 	if err != nil {
-		return nil, fmt.Errorf("ask marshal error", err)
+		return nil, fmt.Errorf("ask marshal error %w", err)
 	}
 	msg.Data = data
 	return it.nc.Push(ctx, msg, opts...)
@@ -133,7 +133,7 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 	answer := new({{ name .Output }})
 	err = proto.Unmarshal(resp, answer)
 	if err != nil {
-		return nil, fmt.Errorf("answer unmarshal error", err)
+		return nil, fmt.Errorf("answer unmarshal error %w", err)
 	}
 	return answer, nil
 }
