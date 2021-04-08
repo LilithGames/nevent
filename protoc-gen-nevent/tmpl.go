@@ -56,7 +56,7 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 	msg := nats.NewMsg("{{ $subject }}")
 	data, err := proto.Marshal(e)
 	if err != nil {
-		fmt.Errorf("event marshal error", err)
+		return fmt.Errorf("event marshal error: %w", err)
 	}
 	msg.Data = data
 	return it.nc.Emit(ctx, msg, opts...)
