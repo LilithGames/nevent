@@ -55,7 +55,10 @@ func provideServer(t *testing.T, id string, queue string) *nevent.Server {
 	es, err := nevent.NewServer(s, nevent.Queue(queue), interceptor)
 	assert.Nil(t, err)
 	svc := &service{id: id, queue: queue}
-	pb.RegisterPersonEvent(es, svc, nevent.ListenSTValue("*"))
+	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person){
+		fmt.Printf("func event(%s, %s): %+v\n", id, queue, m)
+
+	}), nevent.ListenSTValue("*"))
 	pb.RegisterPersonAsk(es, svc)
 	pb.RegisterPersonPush(es, svc)
 	return es

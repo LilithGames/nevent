@@ -39,6 +39,11 @@ type {{ name . }}Listener interface {
 	On{{ name . }}(ctx context.Context, m *{{ name .Input }})
 }
 
+type {{ name . }}FuncListener func(ctx context.Context, m *{{ name .Input }})
+func (fn {{ name . }}FuncListener) On{{ name . }}(ctx context.Context, m *{{ name .Input }}) {
+	fn(ctx, m)
+}
+
 func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
 	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
 		data := new({{ name .Input }})
@@ -66,6 +71,12 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 type {{ name . }}Listener interface {
 	On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (error)
 }
+
+type {{ name . }}FuncListener func(ctx context.Context, m *{{ name .Input }}) error
+func (fn {{ name . }}FuncListener) On{{ name . }}(ctx context.Context, m *{{ name .Input }}) error {
+	return fn(ctx, m)
+}
+
 
 func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
 	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
@@ -97,6 +108,11 @@ func Ensure{{ name . }}Stream(str *nevent.Stream, opts ...nevent.StreamOption) (
 
 type {{ name . }}Listener interface {
 	On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (*{{ name .Output }}, error)
+}
+
+type {{ name . }}FuncListener func(ctx context.Context, m *{{ name .Input }}) (*{{ name .Output }}, error)
+func (fn {{ name . }}FuncListener) On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (*{{ name .Output }}, error) {
+	return fn(ctx, m)
 }
 
 func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {

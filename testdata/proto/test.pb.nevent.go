@@ -10,3 +10,130 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/nats-io/nats.go"
 )
+
+type TestClient struct {
+	nc *nevent.Client
+}
+
+func NewTestClient(nc *nevent.Client) *TestClient {
+	return &TestClient{nc: nc}
+}
+
+type PersonEventListener interface {
+	OnPersonEvent(ctx context.Context, m *Person)
+}
+
+type PersonEventFuncListener func(ctx context.Context, m *Person)
+
+func (fn PersonEventFuncListener) OnPersonEvent(ctx context.Context, m *Person) {
+	fn(ctx, m)
+}
+
+func RegisterPersonEvent(s *nevent.Server, handler PersonEventListener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
+	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
+		data := new(Person)
+		err := proto.Unmarshal(m.Data, data)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal event: %w", err)
+		}
+		handler.OnPersonEvent(ctx, data)
+		return nil, nil
+	}
+	return s.ListenEvent("proto.Test.PersonEvent", pb.EventType_Event, eh, opts...)
+}
+
+func (it *TestClient) PersonEvent(ctx context.Context, e *Person, opts ...nevent.EmitOption) error {
+	msg := nats.NewMsg("proto.Test.PersonEvent")
+	data, err := proto.Marshal(e)
+	if err != nil {
+		return fmt.Errorf("event marshal error: %w", err)
+	}
+	msg.Data = data
+	return it.nc.Emit(ctx, msg, opts...)
+}
+
+type PersonAskListener interface {
+	OnPersonAsk(ctx context.Context, m *Person) (*Company, error)
+}
+
+type PersonAskFuncListener func(ctx context.Context, m *Person) (*Company, error)
+
+func (fn PersonAskFuncListener) OnPersonAsk(ctx context.Context, m *Person) (*Company, error) {
+	return fn(ctx, m)
+}
+
+func RegisterPersonAsk(s *nevent.Server, handler PersonAskListener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
+	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
+		data := new(Person)
+		err := proto.Unmarshal(m.Data, data)
+		if err != nil {
+			return nil, fmt.Errorf("server unmarshal ask: %w", err)
+		}
+		resp, err := handler.OnPersonAsk(ctx, data)
+		if err != nil {
+			return nil, err
+		}
+		bs, err := proto.Marshal(resp)
+		if err != nil {
+			return nil, fmt.Errorf("server marshal answer: %w", err)
+		}
+		return bs, nil
+	}
+	return s.ListenEvent("proto.Test.PersonAsk", pb.EventType_Ask, eh, opts...)
+}
+
+func (it *TestClient) PersonAsk(ctx context.Context, e *Person, opts ...nevent.EmitOption) (*Company, error) {
+	msg := nats.NewMsg("proto.Test.PersonAsk")
+	data, err := proto.Marshal(e)
+	if err != nil {
+		return nil, fmt.Errorf("ask marshal error", err)
+	}
+	msg.Data = data
+	resp, err := it.nc.Ask(ctx, msg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	answer := new(Company)
+	err = proto.Unmarshal(resp, answer)
+	if err != nil {
+		return nil, fmt.Errorf("answer unmarshal error %w", err)
+	}
+	return answer, nil
+}
+
+type PersonPushListener interface {
+	OnPersonPush(ctx context.Context, m *Person) error
+}
+
+type PersonPushFuncListener func(ctx context.Context, m *Person) error
+
+func (fn PersonPushFuncListener) OnPersonPush(ctx context.Context, m *Person) error {
+	return fn(ctx, m)
+}
+
+func RegisterPersonPush(s *nevent.Server, handler PersonPushListener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
+	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
+		data := new(Person)
+		err := proto.Unmarshal(m.Data, data)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal event: %w", err)
+		}
+		err = handler.OnPersonPush(ctx, data)
+		return nil, err
+	}
+	return s.ListenEvent("proto.Test.person_push", pb.EventType_Push, eh, opts...)
+}
+
+func (it *TestClient) PersonPush(ctx context.Context, e *Person, opts ...nevent.EmitOption) (*pb.PushAck, error) {
+	msg := nats.NewMsg("proto.Test.person_push")
+	data, err := proto.Marshal(e)
+	if err != nil {
+		return nil, fmt.Errorf("ask marshal error %w", err)
+	}
+	msg.Data = data
+	return it.nc.Push(ctx, msg, opts...)
+}
+
+func EnsurePersonPushStream(str *nevent.Stream, opts ...nevent.StreamOption) (*nats.StreamInfo, error) {
+	return str.EnsureStream("proto.Test.person_push", opts...)
+}
