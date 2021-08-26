@@ -134,7 +134,10 @@ func (it *Client) Emit(ctx context.Context, m *nats.Msg, opts ...EmitOption) err
 		return nil, nil
 	}
 	_, err := it.o.interceptor(next)(ctx, pb.EventType_Event, m)
-	return fmt.Errorf("nevent emit %s next proc %w", m.Subject, err)
+	if err != nil {
+		return fmt.Errorf("nevent emit %s next proc %w", m.Subject, err)
+	}
+	return nil
 }
 
 func (it *Client) Ask(ctx context.Context, m *nats.Msg, opts ...EmitOption) ([]byte, error) {
