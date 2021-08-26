@@ -188,7 +188,7 @@ func (it *Server) ListenEvent(subject string, t pb.EventType, eh EventHandler, o
 				return
 			}
 			if err != nil {
-				it.o.errorHandler(fmt.Errorf("nvent push %s ack error: %w", subject, err))
+				it.o.errorHandler(fmt.Errorf("nevent push %s ack error: %w", subject, err))
 				return
 			}
 		default:

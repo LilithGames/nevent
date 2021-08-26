@@ -128,7 +128,10 @@ func (it *Client) Emit(ctx context.Context, m *nats.Msg, opts ...EmitOption) err
 	m.Subject = it.GetSubject(m.Subject, o)
 	next := func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error) {
 		err := it.nc.PublishMsg(m)
-		return nil, fmt.Errorf("nevent emit %s push msg %w", m.Subject, err)
+		if err != nil {
+			return nil, fmt.Errorf("nevent emit %s push msg %w", m.Subject, err)
+		}
+		return nil, nil
 	}
 	_, err := it.o.interceptor(next)(ctx, pb.EventType_Event, m)
 	return fmt.Errorf("nevent emit %s next proc %w", m.Subject, err)
