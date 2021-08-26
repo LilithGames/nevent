@@ -1,23 +1,23 @@
 package nevent
 
 import (
-	"fmt"
 	"context"
-	"runtime/debug"
 	"errors"
+	"fmt"
+	"runtime/debug"
 	"sync"
 
-	"github.com/nats-io/nats.go"
-	"github.com/golang/protobuf/proto"
 	pb "github.com/LilithGames/nevent/proto"
+	"github.com/golang/protobuf/proto"
+	"github.com/nats-io/nats.go"
 )
 
 var ErrNak error = errors.New("Nak")
 
 type serverOptions struct {
-	queue string
-	interceptor ServerInterceptor
-	errorHandler func(error)
+	queue              string
+	interceptor        ServerInterceptor
+	errorHandler       func(error)
 	subjectTransformer SubjectTransformer
 }
 
@@ -55,12 +55,11 @@ func ServerSTValue(value string) ServerOption {
 	})
 }
 
-
 type Server struct {
-	nc *nats.Conn
-	o *serverOptions
-	once *sync.Once
-	jet nats.JetStreamContext
+	nc     *nats.Conn
+	o      *serverOptions
+	once   *sync.Once
+	jet    nats.JetStreamContext
 	jeterr error
 }
 
@@ -71,7 +70,7 @@ func NewServer(nc *nats.Conn, opts ...ServerOption) (*Server, error) {
 		opt.apply(o)
 	}
 	if o.errorHandler == nil {
-		o.errorHandler = func(error){}
+		o.errorHandler = func(error) {}
 	}
 	if o.interceptor == nil {
 		o.interceptor = IdentityServerInterceptor()
@@ -80,14 +79,14 @@ func NewServer(nc *nats.Conn, opts ...ServerOption) (*Server, error) {
 		o.subjectTransformer = DefaultSubjectTransformer()
 	}
 	return &Server{
-		nc: nc,
-		o: o,
+		nc:   nc,
+		o:    o,
 		once: &sync.Once{},
 	}, nil
 }
 
-type listenOptions struct{
-	queue string
+type listenOptions struct {
+	queue              string
 	subjectTransformer SubjectTransformer
 }
 type ListenOption interface {
@@ -96,6 +95,7 @@ type ListenOption interface {
 type funcListenOption struct {
 	f func(*listenOptions)
 }
+
 func (it *funcListenOption) apply(o *listenOptions) {
 	it.f(o)
 }
@@ -104,7 +104,7 @@ func newFuncListenOption(f func(*listenOptions)) ListenOption {
 }
 
 func ListenQueue(queue string) ListenOption {
-	return newFuncListenOption(func(o *listenOptions){
+	return newFuncListenOption(func(o *listenOptions) {
 		o.queue = queue
 	})
 }
@@ -151,7 +151,7 @@ func (it *Server) ListenEvent(subject string, t pb.EventType, eh EventHandler, o
 	mh := func(m *nats.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
-				it.o.errorHandler(fmt.Errorf("event handler panic: %w", errors.New(string(debug.Stack()))))
+				it.o.errorHandler(fmt.Errorf("nevent handler %s panic: %w", subject, errors.New(string(debug.Stack()))))
 			}
 		}()
 		resp, err := it.o.interceptor(next)(context.TODO(), t, m)
@@ -170,12 +170,12 @@ func (it *Server) ListenEvent(subject string, t pb.EventType, eh EventHandler, o
 			}
 			bs, err := proto.Marshal(answer)
 			if err != nil {
-				it.o.errorHandler(fmt.Errorf("server answer marshal error: %w", err))
+				it.o.errorHandler(fmt.Errorf("nevent ask %s server answer marshal error: %w", subject, err))
 				return
 			}
 			err = m.Respond(bs)
 			if err != nil {
-				it.o.errorHandler(fmt.Errorf("answer error: %w", err))
+				it.o.errorHandler(fmt.Errorf("nevent answer %s error: %w", subject, err))
 			}
 			return
 		case pb.EventType_Push:
@@ -184,15 +184,15 @@ func (it *Server) ListenEvent(subject string, t pb.EventType, eh EventHandler, o
 			} else if err == nil {
 				err = m.Ack()
 			} else {
-				it.o.errorHandler(fmt.Errorf("push error: %w", err))
+				it.o.errorHandler(fmt.Errorf("nevent push %s error: %w", subject, err))
 				return
 			}
 			if err != nil {
-				it.o.errorHandler(fmt.Errorf("push ack error: %w", err))
+				it.o.errorHandler(fmt.Errorf("nvent push %s ack error: %w", subject, err))
 				return
 			}
 		default:
-			panic(fmt.Errorf("not supported type: %v", t))
+			panic(fmt.Errorf("nevent subject %s not supported type: %v", subject, t))
 		}
 	}
 	if t == pb.EventType_Event || t == pb.EventType_Ask {
@@ -212,7 +212,7 @@ func (it *Server) ListenEvent(subject string, t pb.EventType, eh EventHandler, o
 			return jet.Subscribe(fullsubject, mh)
 		}
 	} else {
-		return nil, fmt.Errorf("unknown type: %v", t)
+		return nil, fmt.Errorf("nevent %s unknown type: %v", subject, t)
 	}
 }
 
