@@ -1,26 +1,25 @@
 package nevent
 
 import (
+	"context"
 	"fmt"
 	"sync"
-	"context"
-	"errors"
 
-	"github.com/nats-io/nats.go"
-	"github.com/golang/protobuf/proto"
 	pb "github.com/LilithGames/nevent/proto"
+	"github.com/golang/protobuf/proto"
+	"github.com/nats-io/nats.go"
 )
 
-type clientOptions struct{
-	interceptor ClientInterceptor
+type clientOptions struct {
+	interceptor        ClientInterceptor
 	subjectTransformer SubjectTransformer
 }
 
-type ClientOption interface{
+type ClientOption interface {
 	apply(*clientOptions)
 }
 
-type funcClientOption struct{
+type funcClientOption struct {
 	f func(*clientOptions)
 }
 
@@ -44,7 +43,7 @@ func ClientSTValue(value string) ClientOption {
 	})
 }
 
-type emitOptions struct{
+type emitOptions struct {
 	subjectTransformer SubjectTransformer
 }
 
@@ -52,7 +51,7 @@ type EmitOption interface {
 	apply(*emitOptions)
 }
 
-type funcEmitOption struct{
+type funcEmitOption struct {
 	f func(*emitOptions)
 }
 
@@ -77,10 +76,10 @@ func EmitSTValue(value string) EmitOption {
 }
 
 type Client struct {
-	nc *nats.Conn
-	o *clientOptions
+	nc   *nats.Conn
+	o    *clientOptions
 	once *sync.Once
-	jet nats.JetStreamContext
+	jet  nats.JetStreamContext
 	jerr error
 }
 
@@ -96,8 +95,8 @@ func NewClient(nc *nats.Conn, opts ...ClientOption) (*Client, error) {
 		o.subjectTransformer = DefaultSubjectTransformer()
 	}
 	return &Client{
-		nc: nc,
-		o: o,
+		nc:   nc,
+		o:    o,
 		once: &sync.Once{},
 	}, nil
 }
@@ -129,10 +128,16 @@ func (it *Client) Emit(ctx context.Context, m *nats.Msg, opts ...EmitOption) err
 	m.Subject = it.GetSubject(m.Subject, o)
 	next := func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error) {
 		err := it.nc.PublishMsg(m)
-		return nil, err
+		if err != nil {
+			return nil, fmt.Errorf("nevent emit %s push msg %w", m.Subject, err)
+		}
+		return nil, nil
 	}
 	_, err := it.o.interceptor(next)(ctx, pb.EventType_Event, m)
-	return err
+	if err != nil {
+		return fmt.Errorf("nevent emit %s next proc %w", m.Subject, err)
+	}
+	return nil
 }
 
 func (it *Client) Ask(ctx context.Context, m *nats.Msg, opts ...EmitOption) ([]byte, error) {
@@ -141,21 +146,21 @@ func (it *Client) Ask(ctx context.Context, m *nats.Msg, opts ...EmitOption) ([]b
 	next := func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error) {
 		resp, err := it.nc.RequestMsgWithContext(ctx, m)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("nevent ask request %s msg err %w", m.Subject, err)
 		}
 		answer := new(pb.Answer)
 		err = proto.Unmarshal(resp.Data, answer)
 		if err != nil {
-			return nil, fmt.Errorf("client answer unmarshal error: %w", err)
+			return nil, fmt.Errorf("nevent ask %s rsp unmarshal error: %w", m.Subject, err)
 		}
 		if answer.Error != "" {
-			return nil, errors.New(answer.Error)
+			return nil, fmt.Errorf("nevent ask %s answer error: %s", m.Subject, answer.Error)
 		}
 		return answer.Data, nil
 	}
 	resp, err := it.o.interceptor(next)(ctx, pb.EventType_Ask, m)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("nevent ask %s rsp proc err:%w", m.Subject, err)
 	}
 	return resp.([]byte), nil
 }
@@ -166,17 +171,17 @@ func (it *Client) Push(ctx context.Context, m *nats.Msg, opts ...EmitOption) (*p
 	next := func(ctx context.Context, t pb.EventType, m *nats.Msg) (interface{}, error) {
 		jet, err := it.Jet()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("nevent push %s jet construct %w", m.Subject, err)
 		}
 		_, err = jet.PublishMsg(m)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("nevent push %s jet push msg %w", m.Subject, err)
 		}
 		return new(pb.PushAck), nil
 	}
 	resp, err := it.o.interceptor(next)(ctx, pb.EventType_Push, m)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("nevent push %s next proc %w", m.Subject, err)
 	}
 	return resp.(*pb.PushAck), nil
 }
