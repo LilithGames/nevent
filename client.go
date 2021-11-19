@@ -3,11 +3,10 @@ package nevent
 import (
 	"context"
 	"fmt"
-	"sync"
-
 	pb "github.com/LilithGames/nevent/proto"
-	"github.com/golang/protobuf/proto"
 	"github.com/nats-io/nats.go"
+	"google.golang.org/protobuf/proto"
+	"sync"
 )
 
 type clientOptions struct {
@@ -153,11 +152,15 @@ func (it *Client) Ask(ctx context.Context, m *nats.Msg, opts ...EmitOption) ([]b
 		if err != nil {
 			return nil, fmt.Errorf("nevent ask %s rsp unmarshal error: %w", m.Subject, err)
 		}
+
 		if answer.Error != "" {
-			return nil, fmt.Errorf("nevent ask %s answer error: %s", m.Subject, answer.Error)
+			return nil, &AskError{
+				AnswerError: answer.Error,
+			}
 		}
 		return answer.Data, nil
 	}
+
 	resp, err := it.o.interceptor(next)(ctx, pb.EventType_Ask, m)
 	if err != nil {
 		return nil, fmt.Errorf("nevent ask %s rsp proc err:%w", m.Subject, err)
