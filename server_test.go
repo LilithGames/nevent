@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"testing"
 	"context"
+	"time"
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/LilithGames/nevent"
 	npb "github.com/LilithGames/nevent/proto"
@@ -41,18 +44,21 @@ func provideServer(t *testing.T, id string, queue string) *nevent.Server {
 	assert.Nil(t, err)
 	i1 := func(next nevent.ServerEventHandler) nevent.ServerEventHandler {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("server i1: %+v\n", t)
+			// fmt.Printf("server i1: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
 	i2 := func(next nevent.ServerEventHandler) nevent.ServerEventHandler {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("server i2: %+v\n", t)
+			// fmt.Printf("server i2: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
 	interceptor := nevent.FuncServerInterceptor(nevent.ChainServerInterceptor(i1, i2))
-	es, err := nevent.NewServer(s, nevent.Queue(queue), interceptor)
+	eh := func(err error) {
+		fmt.Printf("%+v\n", err)
+	}
+	es, err := nevent.NewServer(s, nevent.Queue(queue), nevent.ServerErrorHandler(eh), interceptor)
 	assert.Nil(t, err)
 	svc := &service{id: id, queue: queue}
 	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person){
@@ -77,13 +83,13 @@ func provideClient(t *testing.T) *pb.TestClient {
 	assert.Nil(t, err)
 	i1 := func(next nevent.ClientEventInvoker) nevent.ClientEventInvoker {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("client i1: %+v\n", t)
+			// fmt.Printf("client i1: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
 	i2 := func(next nevent.ClientEventInvoker) nevent.ClientEventInvoker {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("client i2: %+v\n", t)
+			// fmt.Printf("client i2: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
@@ -100,6 +106,17 @@ func TestEvent(t *testing.T) {
 	assert.Nil(t, err)
 	select{}
 }
+
+func TestEventLeak(t *testing.T) {
+	go http.ListenAndServe("0.0.0.0:6060", nil)
+	provideServer(t, "id", "queue")
+	pbc := provideClient(t)
+	for i := 0; ; i++ {
+		pbc.PersonEvent(context.TODO(), &pb.Person{Name: fmt.Sprintf("hulucc_event%d", i)}, nevent.EmitSTValue("1"))
+		time.Sleep(time.Millisecond)
+	}
+}
+
 
 func TestAsk(t *testing.T) {
 	provideServer(t, "id", "queue")
@@ -121,3 +138,4 @@ func TestPush(t *testing.T) {
 	assert.Nil(t, err)
 	select{}
 }
+

@@ -43,6 +43,13 @@ func Queue(queue string) ServerOption {
 	})
 }
 
+func ServerErrorHandler(f func(error)) ServerOption {
+	return newFuncServerOption(func(o *serverOptions) {
+		o.errorHandler = f
+	})
+}
+
+
 func ServerSubjectTransformer(ts SubjectTransformer) ServerOption {
 	return newFuncServerOption(func(o *serverOptions) {
 		o.subjectTransformer = ts
