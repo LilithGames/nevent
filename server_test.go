@@ -7,6 +7,7 @@ import (
 	"time"
 	"net/http"
 	_ "net/http/pprof"
+	"sync"
 
 	"github.com/LilithGames/nevent"
 	npb "github.com/LilithGames/nevent/proto"
@@ -16,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var wg sync.WaitGroup
+
 type service struct{
 	id string
 	queue string
@@ -23,6 +26,7 @@ type service struct{
 
 func (it *service) OnPersonEvent(ctx context.Context, e *pb.Person) {
 	fmt.Printf("event(%s, %s): %+v\n", it.id, it.queue, e)
+	wg.Done()
 }
 
 func (it *service) OnPersonAsk(ctx context.Context, e *pb.Person) (*pb.Company, error) {
@@ -63,7 +67,7 @@ func provideServer(t *testing.T, id string, queue string) *nevent.Server {
 	svc := &service{id: id, queue: queue}
 	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person){
 		fmt.Printf("func event(%s, %s): %+v\n", id, queue, m)
-
+		wg.Done()
 	}), nevent.ListenSTValue("*"))
 	pb.RegisterPersonAsk(es, svc)
 	pb.RegisterPersonPush(es, svc)
@@ -100,11 +104,12 @@ func provideClient(t *testing.T) *pb.TestClient {
 }
 
 func TestEvent(t *testing.T) {
+	wg.Add(1)
 	provideServer(t, "id", "queue")
 	pbc := provideClient(t)
 	err := pbc.PersonEvent(context.TODO(), &pb.Person{Name: "hulucc_event"}, nevent.EmitSTValue("1"))
 	assert.Nil(t, err)
-	select{}
+	wg.Wait()
 }
 
 func TestEventLeak(t *testing.T) {
@@ -124,7 +129,6 @@ func TestAsk(t *testing.T) {
 	company, err := pbc.PersonAsk(context.TODO(), &pb.Person{Name: "hulucc_ask"})
 	assert.Nil(t, err)
 	fmt.Printf("answer: %+v\n", company)
-	select{}
 }
 
 func TestPush(t *testing.T) {
@@ -136,6 +140,5 @@ func TestPush(t *testing.T) {
 	pbc := provideClient(t)
 	_, err := pbc.PersonPush(context.TODO(), &pb.Person{Name: "hulucc_push"})
 	assert.Nil(t, err)
-	select{}
 }
 
