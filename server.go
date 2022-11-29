@@ -204,7 +204,7 @@ func (it *Server) ListenEvent(subject string, t pb.EventType, eh EventHandler, o
 	}
 	if t == pb.EventType_Event || t == pb.EventType_Ask {
 		if o.queue != "" {
-			return it.nc.QueueSubscribe(fullsubject, it.o.queue, mh)
+			return it.nc.QueueSubscribe(fullsubject, o.queue, mh)
 		} else {
 			return it.nc.Subscribe(fullsubject, mh)
 		}
