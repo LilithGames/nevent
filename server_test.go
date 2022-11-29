@@ -1,13 +1,13 @@
 package nevent_test
 
 import (
-	"fmt"
-	"testing"
 	"context"
-	"time"
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"sync"
+	"testing"
+	"time"
 
 	"github.com/LilithGames/nevent"
 	npb "github.com/LilithGames/nevent/proto"
@@ -19,8 +19,8 @@ import (
 
 var wg sync.WaitGroup
 
-type service struct{
-	id string
+type service struct {
+	id    string
 	queue string
 }
 
@@ -65,7 +65,7 @@ func provideServer(t *testing.T, id string, queue string) *nevent.Server {
 	es, err := nevent.NewServer(s, nevent.Queue(queue), nevent.ServerErrorHandler(eh), interceptor)
 	assert.Nil(t, err)
 	svc := &service{id: id, queue: queue}
-	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person){
+	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person) {
 		fmt.Printf("func event(%s, %s): %+v\n", id, queue, m)
 		wg.Done()
 	}), nevent.ListenSTValue("*"))
@@ -122,7 +122,6 @@ func TestEventLeak(t *testing.T) {
 	}
 }
 
-
 func TestAsk(t *testing.T) {
 	provideServer(t, "id", "queue")
 	pbc := provideClient(t)
@@ -142,3 +141,29 @@ func TestPush(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func registerListenQueue(es *nevent.Server, id string, queue string) {
+	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person) {
+		fmt.Printf("func event(%s, %s): %+v\n", id, queue, m)
+		wg.Done()
+	}), nevent.ListenSTValue("*"), nevent.ListenQueue(queue))
+}
+
+func TestListenQueue(t *testing.T) {
+
+	es := provideServer(t, "id", "queue")
+	wg.Add(1)
+
+	registerListenQueue(es, "id1", "queue1")
+	wg.Add(1)
+
+	registerListenQueue(es, "id2", "queue2")
+	wg.Add(1)
+
+	registerListenQueue(es, "id3", "queue2")
+
+	pbc := provideClient(t)
+	err := pbc.PersonEvent(context.TODO(), &pb.Person{Name: "test_event"}, nevent.EmitSTValue("1"))
+	assert.Nil(t, err)
+
+	wg.Wait()
+}
