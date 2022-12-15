@@ -39,6 +39,11 @@ type {{ name . }}Listener interface {
 	On{{ name . }}(ctx context.Context, m *{{ name .Input }})
 }
 
+type {{ name . }}FuncListener func(ctx context.Context, m *{{ name .Input }})
+func (fn {{ name . }}FuncListener) On{{ name . }}(ctx context.Context, m *{{ name .Input }}) {
+	fn(ctx, m)
+}
+
 func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
 	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
 		data := new({{ name .Input }})
@@ -56,7 +61,7 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 	msg := nats.NewMsg("{{ $subject }}")
 	data, err := proto.Marshal(e)
 	if err != nil {
-		fmt.Errorf("event marshal error", err)
+		return fmt.Errorf("event marshal error: %w", err)
 	}
 	msg.Data = data
 	return it.nc.Emit(ctx, msg, opts...)
@@ -66,6 +71,12 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 type {{ name . }}Listener interface {
 	On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (error)
 }
+
+type {{ name . }}FuncListener func(ctx context.Context, m *{{ name .Input }}) error
+func (fn {{ name . }}FuncListener) On{{ name . }}(ctx context.Context, m *{{ name .Input }}) error {
+	return fn(ctx, m)
+}
+
 
 func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
 	eh := func(ctx context.Context, m *nats.Msg) (interface{}, error) {
@@ -84,7 +95,7 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 	msg := nats.NewMsg("{{ $subject }}")
 	data, err := proto.Marshal(e)
 	if err != nil {
-		return nil, fmt.Errorf("ask marshal error", err)
+		return nil, fmt.Errorf("ask marshal error %w", err)
 	}
 	msg.Data = data
 	return it.nc.Push(ctx, msg, opts...)
@@ -97,6 +108,11 @@ func Ensure{{ name . }}Stream(str *nevent.Stream, opts ...nevent.StreamOption) (
 
 type {{ name . }}Listener interface {
 	On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (*{{ name .Output }}, error)
+}
+
+type {{ name . }}FuncListener func(ctx context.Context, m *{{ name .Input }}) (*{{ name .Output }}, error)
+func (fn {{ name . }}FuncListener) On{{ name . }}(ctx context.Context, m *{{ name .Input }}) (*{{ name .Output }}, error) {
+	return fn(ctx, m)
 }
 
 func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts ...nevent.ListenOption) (*nats.Subscription, error) {
@@ -133,7 +149,7 @@ func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }
 	answer := new({{ name .Output }})
 	err = proto.Unmarshal(resp, answer)
 	if err != nil {
-		return nil, fmt.Errorf("answer unmarshal error", err)
+		return nil, fmt.Errorf("answer unmarshal error %w", err)
 	}
 	return answer, nil
 }

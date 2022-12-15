@@ -1,9 +1,13 @@
 package nevent_test
 
 import (
-	"fmt"
-	"testing"
 	"context"
+	"fmt"
+	"net/http"
+	_ "net/http/pprof"
+	"sync"
+	"testing"
+	"time"
 
 	"github.com/LilithGames/nevent"
 	npb "github.com/LilithGames/nevent/proto"
@@ -13,13 +17,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type service struct{
-	id string
+var wg sync.WaitGroup
+
+type service struct {
+	id    string
 	queue string
 }
 
 func (it *service) OnPersonEvent(ctx context.Context, e *pb.Person) {
 	fmt.Printf("event(%s, %s): %+v\n", it.id, it.queue, e)
+	wg.Done()
 }
 
 func (it *service) OnPersonAsk(ctx context.Context, e *pb.Person) (*pb.Company, error) {
@@ -41,21 +48,27 @@ func provideServer(t *testing.T, id string, queue string) *nevent.Server {
 	assert.Nil(t, err)
 	i1 := func(next nevent.ServerEventHandler) nevent.ServerEventHandler {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("server i1: %+v\n", t)
+			// fmt.Printf("server i1: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
 	i2 := func(next nevent.ServerEventHandler) nevent.ServerEventHandler {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("server i2: %+v\n", t)
+			// fmt.Printf("server i2: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
 	interceptor := nevent.FuncServerInterceptor(nevent.ChainServerInterceptor(i1, i2))
-	es, err := nevent.NewServer(s, nevent.Queue(queue), interceptor)
+	eh := func(err error) {
+		fmt.Printf("%+v\n", err)
+	}
+	es, err := nevent.NewServer(s, nevent.Queue(queue), nevent.ServerErrorHandler(eh), interceptor)
 	assert.Nil(t, err)
 	svc := &service{id: id, queue: queue}
-	pb.RegisterPersonEvent(es, svc, nevent.ListenSTValue("*"))
+	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person) {
+		fmt.Printf("func event(%s, %s): %+v\n", id, queue, m)
+		wg.Done()
+	}), nevent.ListenSTValue("*"))
 	pb.RegisterPersonAsk(es, svc)
 	pb.RegisterPersonPush(es, svc)
 	return es
@@ -74,13 +87,13 @@ func provideClient(t *testing.T) *pb.TestClient {
 	assert.Nil(t, err)
 	i1 := func(next nevent.ClientEventInvoker) nevent.ClientEventInvoker {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("client i1: %+v\n", t)
+			// fmt.Printf("client i1: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
 	i2 := func(next nevent.ClientEventInvoker) nevent.ClientEventInvoker {
 		return func(ctx context.Context, t npb.EventType, m *nats.Msg) (interface{}, error) {
-			fmt.Printf("client i2: %+v\n", t)
+			// fmt.Printf("client i2: %+v\n", t)
 			return next(ctx, t, m)
 		}
 	}
@@ -91,11 +104,22 @@ func provideClient(t *testing.T) *pb.TestClient {
 }
 
 func TestEvent(t *testing.T) {
+	wg.Add(1)
 	provideServer(t, "id", "queue")
 	pbc := provideClient(t)
 	err := pbc.PersonEvent(context.TODO(), &pb.Person{Name: "hulucc_event"}, nevent.EmitSTValue("1"))
 	assert.Nil(t, err)
-	select{}
+	wg.Wait()
+}
+
+func TestEventLeak(t *testing.T) {
+	go http.ListenAndServe("0.0.0.0:6060", nil)
+	provideServer(t, "id", "queue")
+	pbc := provideClient(t)
+	for i := 0; ; i++ {
+		pbc.PersonEvent(context.TODO(), &pb.Person{Name: fmt.Sprintf("hulucc_event%d", i)}, nevent.EmitSTValue("1"))
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func TestAsk(t *testing.T) {
@@ -104,7 +128,6 @@ func TestAsk(t *testing.T) {
 	company, err := pbc.PersonAsk(context.TODO(), &pb.Person{Name: "hulucc_ask"})
 	assert.Nil(t, err)
 	fmt.Printf("answer: %+v\n", company)
-	select{}
 }
 
 func TestPush(t *testing.T) {
@@ -116,5 +139,31 @@ func TestPush(t *testing.T) {
 	pbc := provideClient(t)
 	_, err := pbc.PersonPush(context.TODO(), &pb.Person{Name: "hulucc_push"})
 	assert.Nil(t, err)
-	select{}
+}
+
+func registerListenQueue(es *nevent.Server, id string, queue string) {
+	pb.RegisterPersonEvent(es, pb.PersonEventFuncListener(func(ctx context.Context, m *pb.Person) {
+		fmt.Printf("func event(%s, %s): %+v\n", id, queue, m)
+		wg.Done()
+	}), nevent.ListenSTValue("*"), nevent.ListenQueue(queue))
+}
+
+func TestListenQueue(t *testing.T) {
+
+	es := provideServer(t, "id", "queue")
+	wg.Add(1)
+
+	registerListenQueue(es, "id1", "queue1")
+	wg.Add(1)
+
+	registerListenQueue(es, "id2", "queue2")
+	wg.Add(1)
+
+	registerListenQueue(es, "id3", "queue2")
+
+	pbc := provideClient(t)
+	err := pbc.PersonEvent(context.TODO(), &pb.Person{Name: "test_event"}, nevent.EmitSTValue("1"))
+	assert.Nil(t, err)
+
+	wg.Wait()
 }
