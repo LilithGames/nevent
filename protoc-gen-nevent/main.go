@@ -8,7 +8,7 @@ import (
 
 func main() {
 	pbfeatures := uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
-	g := pgs.Init(pgs.SupportedFeatures(&pbfeatures))
+	g := pgs.Init(pgs.DebugEnv("NEVENT_DEBUG"), pgs.SupportedFeatures(&pbfeatures))
 	g.RegisterModule(NewEvent())
 	g.RegisterPostProcessor(pgsgo.GoFmt())
 	g.Render()

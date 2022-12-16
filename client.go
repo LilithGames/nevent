@@ -3,10 +3,11 @@ package nevent
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	pb "github.com/LilithGames/nevent/proto"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
-	"sync"
 )
 
 type clientOptions struct {

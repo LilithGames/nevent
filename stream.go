@@ -96,10 +96,10 @@ func StreamSubjectNormalizer(subjectNormalizer SubjectNormalizer) StreamOption {
 }
 
 type streamOptions struct {
-	config *nats.StreamConfig
+	config             *nats.StreamConfig
 	subjectTransformer SubjectTransformer
-	subjectNormalizer SubjectNormalizer
-	force bool
+	subjectNormalizer  SubjectNormalizer
+	force              bool
 }
 
 type StreamOption interface {

@@ -20,12 +20,12 @@ import (
 {{- $ssubject := default $soptions.Subject $svc }}
 {{- $bsubject := printf "%s.%s" $fsubject $ssubject }}
 
-type {{ $svc }}Client struct{
+type {{ $svc }}Emitter struct{
 	nc *nevent.Client
 }
 
-func New{{ $svc }}Client(nc *nevent.Client) *{{ $svc }}Client{
-	return &{{ $svc }}Client{nc: nc}
+func New{{ $svc }}Emitter(nc *nevent.Client) *{{ $svc }}Emitter{
+	return &{{ $svc }}Emitter{nc: nc}
 }
 {{- range .Methods }}
 {{- $oname := name .Output }}
@@ -57,7 +57,7 @@ func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts .
 	return s.ListenEvent("{{ $subject }}", pb.EventType_Event, eh, opts...)
 }
 
-func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) error {
+func (it *{{ $svc }}Emitter){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) error {
 	msg := nats.NewMsg("{{ $subject }}")
 	data, err := proto.Marshal(e)
 	if err != nil {
@@ -91,7 +91,7 @@ func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts .
 	return s.ListenEvent("{{ $subject }}", pb.EventType_Push, eh, opts...)
 }
 
-func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) (*pb.PushAck, error) {
+func (it *{{ $svc }}Emitter){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) (*pb.PushAck, error) {
 	msg := nats.NewMsg("{{ $subject }}")
 	data, err := proto.Marshal(e)
 	if err != nil {
@@ -135,7 +135,7 @@ func Register{{ name . }}(s *nevent.Server, handler {{ name . }}Listener, opts .
 	return s.ListenEvent("{{ $subject }}", pb.EventType_Ask, eh, opts...)
 }
 
-func (it *{{ $svc }}Client){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) (*{{ name .Output }}, error) {
+func (it *{{ $svc }}Emitter){{ name . }}(ctx context.Context, e *{{ name .Input }}, opts ...nevent.EmitOption) (*{{ name .Output }}, error) {
 	msg := nats.NewMsg("{{ $subject }}")
 	data, err := proto.Marshal(e)
 	if err != nil {

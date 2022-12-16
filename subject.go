@@ -22,7 +22,7 @@ func PatternSubjectTransformer(pattern string) SubjectTransformer {
 }
 
 func STSubordinate(ns string) SubjectTransformer {
-	return PatternSubjectTransformer("%s."+ns)
+	return PatternSubjectTransformer("%s." + ns)
 }
 
 func STAny() SubjectTransformer {
@@ -52,4 +52,3 @@ func SubjectDenormalize(name string) string {
 	s = strings.Replace(s, "/", ".", -1)
 	return s
 }
-

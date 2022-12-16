@@ -24,7 +24,7 @@ func (it *event) InitContext(c pgs.BuildContext) {
 	it.ctx = pgsgo.InitContext(c.Parameters())
 	tpl := template.New("event").Funcs(map[string]interface{}{
 		"package": it.ctx.PackageName,
-		"name": it.ctx.Name,
+		"name":    it.ctx.Name,
 		"default": func(value interface{}, defaultValue interface{}) interface{} {
 			switch v := value.(type) {
 			case string:
@@ -70,7 +70,24 @@ func (it *event) Execute(targets map[string]pgs.File, pkgs map[string]pgs.Packag
 }
 
 func (it *event) generate(f pgs.File) {
+	if !it.needGenerate(f) {
+		return
+	}
+
 	name := it.ctx.OutputPath(f).SetExt(".nevent.go").String()
-	f.Services()
 	it.AddGeneratorTemplateFile(name, it.tpl, f)
+}
+
+func (it *event) needGenerate(f pgs.File) bool {
+	for _, s := range f.Services() {
+		for _, m := range s.Methods() {
+			if m.Descriptor().OutputType != nil {
+				ot := *m.Descriptor().OutputType
+				if ot == ".nevent.Void" || ot == ".nevent.Ack" || ot == ".nevent.PushAck" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

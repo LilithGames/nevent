@@ -49,7 +49,6 @@ func ServerErrorHandler(f func(error)) ServerOption {
 	})
 }
 
-
 func ServerSubjectTransformer(ts SubjectTransformer) ServerOption {
 	return newFuncServerOption(func(o *serverOptions) {
 		o.subjectTransformer = ts
