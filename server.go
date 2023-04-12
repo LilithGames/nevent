@@ -158,7 +158,7 @@ func (it *Server) ListenEvent(subject string, t pb.EventType, eh EventHandler, o
 	mh := func(m *nats.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
-				it.o.errorHandler(fmt.Errorf("nevent handler %s panic: %w", subject, errors.New(string(debug.Stack()))))
+				it.o.errorHandler(fmt.Errorf("nevent handler %s panic: %w; error: %v", subject, errors.New(string(debug.Stack())), r))
 			}
 		}()
 		resp, err := it.o.interceptor(next)(context.TODO(), t, m)
